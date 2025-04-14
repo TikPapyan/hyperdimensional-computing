@@ -10,6 +10,12 @@ tools
 trigrams
 *.pkl
 nltk_data
+models
+nn.py
+show.py
+digit_rec_tensors.ipynb
+digit_rec_llm_poi.ipynb
+81.py
 
 ### Linux ###
 *~
