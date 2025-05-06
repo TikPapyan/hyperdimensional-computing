@@ -1,3 +1,8 @@
+"""
+Hyperdimensional Computing (HDC) Image Classification Framework
+Based on: Smets et al. (2024) "An encoding framework for binarized images using hyperdimensional computing"
+"""
+
 import numpy as np
 from sklearn.datasets import fetch_olivetti_faces
 from sklearn.model_selection import train_test_split
@@ -6,37 +11,26 @@ from joblib import Parallel, delayed
 from tqdm import tqdm
 from skimage.feature import canny
 
-# =====================
-# Hyperparameters
-# =====================
-d = 10000               # Hypervector dimensionality
-patch_size = 7         # Local patch size
-S_global = 4           # Splits for global position CIM
-learning_rate = 1.0    # OnlineHD learning rate η
-max_iter = 5           # Iterative retraining epochs
-tol = 1e-6            # Convergence tolerance
+d = 10000
+patch_size = 7
+S_global = 4
+learning_rate = 1.0
+max_iter = 5
+tol = 1e-6
 
-# =====================
-# 1. Data loading & preprocessing
-# =====================
 faces = fetch_olivetti_faces(shuffle=True, random_state=42)
 X = faces.images
 y = faces.target
 n_classes = len(faces.target)
 
-# Edge-based binarization
 X_edges = Parallel(n_jobs=-1)(delayed(canny)(img, sigma=1.0) for img in X)
 X_bin = np.array(X_edges, dtype=np.int32)
 
-# Train/test split
 X_train, X_test, y_train, y_test = train_test_split(
     X_bin, y, test_size=0.2, stratify=y, random_state=42
 )
 print(f"Dataset: {len(X_train)} train, {len(X_test)} test, {n_classes} classes")
 
-# =====================
-# 2. HDC operations & CIM generation
-# =====================
 np.random.seed(42)
 
 def random_hv(dim):
@@ -57,7 +51,6 @@ def bin2bipolar(hv):
 def hamming(a,b):
     return np.mean(a!=b)
 
-# Local linear mapping for global CIMs
 def gen_local_cim(npos, dim, splits):
     splits_idx = np.linspace(0, npos-1, splits+1, dtype=int)
     cim = {}
@@ -79,15 +72,11 @@ h, w = X_train.shape[1], X_train.shape[2]
 global_x = gen_local_cim(h, d, S_global)
 global_y = gen_local_cim(w, d, S_global)
 
-# Patch-relative CIMs (orthogonal)
 patch_x = {i: random_hv(d) for i in range(patch_size)}
 patch_y = {j: random_hv(d) for j in range(patch_size)}
 value_hvs = {0: random_hv(d), 1: random_hv(d)}
 off = patch_size//2
 
-# =====================
-# 3. Encoding function
-# =====================
 def encode(img):
     pts = np.argwhere(img==1)
     vecs = []
@@ -104,9 +93,6 @@ def encode(img):
         vecs.append(bind(p_hv, bind(global_x[x], global_y[y])))
     return bundle(vecs)
 
-# =====================
-# 4. OnlineHD classifier
-# =====================
 class OnlineHD:
     def __init__(self, dim, n_cls, lr=1.0):
         self.d = dim
@@ -145,15 +131,11 @@ class OnlineHD:
                 self.acc[true] += self.lr*(1-δ_true)*bH
                 self.acc[pred] -= self.lr*(1-δ_pred)*bH
             self.normalize()
-            # convergence check across class hypervectors
             diff = max(np.linalg.norm(self.acc[c]-prev_acc[c]) for c in self.acc)
             if diff < tol:
                 print(f"Converged after {e+1} iterations (diff={diff:.2e})")
                 break
 
-# =====================
-# 5. Run pipeline
-# =====================
 enc_train = Parallel(n_jobs=-1)(delayed(encode)(img) for img in tqdm(X_train, desc="Enc Train"))
 enc_test  = Parallel(n_jobs=-1)(delayed(encode)(img) for img in tqdm(X_test, desc="Enc Test"))
 
